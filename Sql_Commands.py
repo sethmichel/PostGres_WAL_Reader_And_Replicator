@@ -1,0 +1,54 @@
+
+# NOTE: use placeholders in sql instead of using f strings to pass in all parameters is better 
+#       for preventing sql injection attacks
+
+# globals ---------------
+lsn_offset_table = "Lsn_Offsets"
+
+# -----------------------
+
+# store last applied lsn
+# slot_name	        last_applied_lsn
+# slot_wal_reader	0/16B6C50
+
+
+# get last applied lsn
+# slot_name	        last_applied_lsn
+# slot_wal_reader	0/16B6C50
+
+
+# create lsn offset table
+def Create_LSN_Offset_Table():
+    return f"""
+            CREATE TABLE IF NOT EXISTS {lsn_offset_table} (
+                slot_name TEXT PRIMARY KEY,
+                last_applied_lsn TEXT NOT NULL
+            )
+           """
+
+
+def Get_Last_Applied_Lsn():
+    return f"SELECT last_applied_lsn FROM {lsn_offset_table} WHERE slot_name = ?"
+
+
+def Set_Last_Applied_Lsn():
+    return f"""
+            INSERT INTO {lsn_offset_table}(slot_name, last_applied_lsn)
+            VALUES(?, ?)
+            ON CONFLICT(slot_name) DO UPDATE SET last_applied_lsn = excluded.last_applied_lsn
+            """
+
+
+def Insert_Into_Cdc_Events():
+    return """
+           INSERT INTO cdc_events(table_fqn, pk, commit_lsn, payload)
+           VALUES (%s, %s, %s, %s)
+           ON CONFLICT (table_fqn, pk, commit_lsn) DO NOTHING
+           """
+
+
+
+
+
+
+
