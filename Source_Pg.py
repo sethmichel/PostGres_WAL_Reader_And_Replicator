@@ -19,38 +19,38 @@ pg -> WAL -> logical decoding plugin -> pg_recvlogical -> stdout JSON -> Python 
 # asks pg for its current WAL position
 # use with this the last_applied_lsn to figure out where I should move to
 # returns pg_lsn as text like '0/16B6C50'
-async def Get_Current_Lsn(dsn):
-    async with await psycopg.AsyncConnection.connect(dsn) as cx:
-        async with cx.cursor() as cur:
-            await cur.execute("SELECT pg_current_wal_lsn()::text")
-            (lsn,) = await cur.fetchone()
+def Get_Current_Lsn(dsn):
+    with psycopg.AsyncConnection.connect(dsn) as cx:
+        with cx.cursor() as cur:
+            cur.execute("SELECT pg_current_wal_lsn()::text")
+            (lsn,) = cur.fetchone()
 
             return lsn
 
 
 # check the publication is still up. if not create one on primary
 # primary should be doing the publishing
-async def Ensure_Publication(dsn, publication):
-    async with await psycopg.AsyncConnection.connect(dsn) as cx:
-        async with cx.cursor() as cur:
-            await cur.execute("""SELECT 1 FROM pg_publication WHERE pubname = %s""", (publication,))
-            exists = await cur.fetchone()
+def Ensure_Publication(dsn, publication):
+    with psycopg.connect(dsn) as cx:
+        with cx.cursor() as cur:
+            cur.execute("""SELECT 1 FROM pg_publication WHERE pubname = %s""", (publication,))
+            exists = cur.fetchone()
 
             if not exists:
-                await cur.execute(f"CREATE PUBLICATION {publication} FOR ALL TABLES")
-                await cx.commit()
+                cur.execute(f"CREATE PUBLICATION {publication} FOR ALL TABLES")
+                cx.commit()
 
 
 # check the logicall replication SLOT exists, if not create one with the decoding plugin (pgoutput, wal2json, ...)
-async def Ensure_Slot(dsn, slot, plugin):
-    async with await psycopg.AsyncConnection.connect(dsn) as cx:
-        async with cx.cursor() as cur:
-            await cur.execute("""SELECT 1 FROM pg_replication_slots WHERE slot_name = %s""", (slot,))
-            exists = await cur.fetchone()
+def Ensure_Slot(dsn, slot, plugin):
+    with psycopg.connect(dsn) as cx:
+        with cx.cursor() as cur:
+            cur.execute("""SELECT 1 FROM pg_replication_slots WHERE slot_name = %s""", (slot,))
+            exists = cur.fetchone()
             if not exists:
-                await cur.execute("SELECT * FROM pg_create_logical_replication_slot(%s, %s)",
+                cur.execute("SELECT * FROM pg_create_logical_replication_slot(%s, %s)",
                                   (slot, plugin))
-                await cx.commit()
+                cx.commit()
 
 
 # decoder: launch a subprocess using pg_recvlogical to stream transformed WAL output that's readable

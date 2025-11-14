@@ -1,7 +1,8 @@
 # my stuff to ignore
-Docker_Stuff/primary.env
-Docker_Stuff/standby.env
-Docker_Stuff/docker-compose.yml
+Docker_Connections/primary.env
+Docker_Connections/standby.env
+Docker_Connections/docker-compose.yml
+app.env
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -100,6 +101,7 @@ celerybeat.pid
 *.sage.py
 
 # Environments
+*.env
 .env
 .venv
 env/
