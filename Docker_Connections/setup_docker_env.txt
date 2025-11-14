@@ -1,0 +1,41 @@
+1) get docker compose & make a env file for each container, and a yml file for docker
+
+2) in the docker folder with the env and yml files: docker compose up -d
+
+3) go to localhost:8080 and login
+
+4) should have servers: primary, standby
+
+5) enable logical replication
+    in primary: CREATE PUBLICATION <publisher name> FOR ALL TABLES;
+    Then do this to see the publication: SELECT * FROM pg_publication;
+        this makes a publication on the primary server. it's a logical replication stream called <name> which includes every table in the db
+
+
+    in standby: CREATE SUBSCRIPTION <subscription name>
+                CONNECTION 'host= port= user= password= dbname='
+                PUBLICATION <publisher name>;
+
+    now we should see some results from: SELECT * FROM pg_stat_replication;
+
+misc commands
+list running containers           docker ps
+
+enter a containers shell          docker exec -it <primary host name> bash
+
+start psql only if username and   psql -U <username>
+db name are the same  
+
+start psql only if username and   psql -U <username> -d <db name>
+db name are different
+
+now we'll see "<username>=#"
+if we see "<username>-#" it means it's waiting for you to finish a multi line query. so you probably forgot the ";"
+                                
+quit                        \q
+switch db's                 \c <db name>
+exit root                   exit
+
+This is where pg writes WAL (shared memory (buffer))  pg_waldump /var/lib/postgresql/data/pg_wal
+
+
