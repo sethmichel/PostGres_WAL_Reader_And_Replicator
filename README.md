@@ -62,7 +62,7 @@ getter/setter for replication offset (last_applied_lsn). it's so the consumer ca
 
 - it's the input for the data pipeline, it transforms the binary wal stream into something usable
 
-- Main.py calls Wal2Json_Via_Pg_Recvlogical() - notice that args is a command line command, so this is basically running a subprocess that does a command line prompt to get WAL results
+- Main.py calls Wal2Json_Via_Pg_Recvlogical() - notice that args is a command line command, so this is basically running a subprocess that does a command line prompt to get WAL results. This subprocess reads all available wal changes. if you used "no-loop" in args then it will exit when it finishes reading.
 
 - data flow of this file
 pg -> WAL -> logical decoding plugin -> pg_recvlogical -> stdout JSON -> Python yields event
@@ -133,3 +133,10 @@ config.py (settings) -> main.py (builds configs, sets up slots, starts loop) -> 
 
 
 
+
+Notes
+- user must have replication privileges, and pg_hba.conf (in the publisher container) must allow replication connection (not just host connections)
+
+- source_pg.py should have the path to pg_recvlogical.exe. you should put it in your system path. it's probably at "C:\Program Files\PostgreSQL\<version>\bin"
+
+- if you add "--no-loop" to the args variable in source_pg.py, it tells the function to exit when it reaches the end of available WAL data

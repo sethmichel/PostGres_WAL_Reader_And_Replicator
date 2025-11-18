@@ -80,12 +80,12 @@ async def Main():
     Check_Replication_Slot(primary_dsn, app_config.slot_name, app_config.plugin) # cleck for a slot, if not create one
 
     # get the most recent lsn that we successfully processed
-    most_recent_successful_lsn = Get_Last_Applied_Lsn(app_config.offsets_path, app_config.slot_name)
+    most_recent_successful_lsn = Get_Last_Applied_Lsn(app_config.slot_name) # returns none if the table is blank
 
-    if most_recent_successful_lsn == None and not app_config.start_from_beginning:
+    if most_recent_successful_lsn == None and app_config.start_from_beginning == False:
         most_recent_successful_lsn = Get_Current_Lsn(primary_dsn)
 
-    # this variable is now a async generator object
+    # this variable is a async generator object
     # this is called in a loop in apply_manager.py
     source = Wal2Json_Via_Pg_Recvlogical(
         dsn_params=Make_Dsn_Params_Dict(primary_config),
@@ -104,6 +104,7 @@ async def Main():
     # function to save the lsn to the table
     def Persist_Lsn(lsn: str):
         Set_Last_Applied_Lsn(app_config.offsets_path, app_config.slot_name, lsn)
+
 
     # main data loop
     # generator -> batch results -> process batch -> send to sink -> save lsn -> generator

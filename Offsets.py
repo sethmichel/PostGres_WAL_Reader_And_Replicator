@@ -1,7 +1,7 @@
 import sqlite3
 from pathlib import Path
 from typing import Optional
-from Sql_Commands import Create_LSN_Offset_Table, Get_Last_Applied_Lsn, Set_Last_Applied_Lsn
+from Sql_Commands import Create_LSN_Offset_Table, Get_Last_Applied_Lsn_Sql, Set_Last_Applied_Lsn
 
 
 '''
@@ -39,10 +39,11 @@ def Get_Lsn_Table_Conn(passed_path):
 
 # gets most recent lsn for a given replication slot
 # called at startup/restart
+# returns none if table is blank
 def Get_Last_Applied_Lsn(slot_name):
     global last_lsn_db_conn
     
-    get_lsn_sql = Get_Last_Applied_Lsn(slot_name)
+    get_lsn_sql = Get_Last_Applied_Lsn_Sql()
     row = last_lsn_db_conn.execute(get_lsn_sql, (slot_name,)).fetchone()
 
     if (row):

@@ -33,15 +33,29 @@ class App_Config:
 def Load_Docker_Env_Config(env_file):
     # Load the specific .env file
     env_path = Path(__file__).parent / "Docker_Connections" / env_file
-    load_dotenv(env_path)
+    load_dotenv(env_path, override=True) # must use override
+
+    # Map env file to host port (since we're connecting from Windows host, not inside container)
+    # Docker port mapping: HOST_PORT:CONTAINER_PORT (e.g., "5434:5432")
+    port_mapping = {
+        "Primary.env": 5434,   # primary container accessible at localhost:5434
+        "primary.env": 5434,
+        "Standby.env": 5435,   # standby container accessible at localhost:5435
+        "standby.env": 5435,
+        "Sink.env": 5436,      # sink container accessible at localhost:5436
+        "sink.env": 5436
+    }
+    
+    host_port = port_mapping.get(env_file, int(os.getenv("POSTGRES_PORT").strip()))
 
     conn_info = Pg_Conn_Info(
-        host="localhost",  # localhost is just for when I'm connecting from host machine
-        port=int(os.getenv("POSTGRES_PORT")),
-        user=os.getenv("POSTGRES_USER"),
-        password=os.getenv("POSTGRES_PASSWORD"),
-        dbname=os.getenv("POSTGRES_DB")
+        host="localhost",   # localhost is for when connecting from host machine
+        port=host_port,     # use the HOST port, not the container port
+        user=os.getenv("POSTGRES_USER").strip(),
+        password=os.getenv("POSTGRES_PASSWORD").strip(),
+        dbname=os.getenv("POSTGRES_DB").strip()
     )
+    #print(f"DEBUG: Loaded config from {env_file}: user={conn_info.user}, host_port={conn_info.port}")
 
     if (conn_info.host == None or conn_info.port == None or conn_info.user == None or
         conn_info.password == None or conn_info.dbname == None):
@@ -58,15 +72,15 @@ def Load_App_Env_Config(env_file, primary_config):
 
     app_info = App_Config(
         primary = primary_config,
-        publication = os.getenv("publication_name"),
-        slot_name = os.getenv("slot_name"),
-        plugin = os.getenv("plugin"),
-        start_from_beginning = os.getenv("start_from_beginning").lower(),
-        batch_size = int(os.getenv("batch_size")),
-        max_retries = int(os.getenv("max_retries")),
-        backoff_seconds = float(os.getenv("backoff_seconds")),
-        status_interval_seconds = float(os.getenv("status_interval_seconds")),
-        offsets_path = os.getenv("offsets_path")
+        publication = os.getenv("publication_name").strip(),
+        slot_name = os.getenv("slot_name").strip(),
+        plugin = os.getenv("plugin").strip(),
+        start_from_beginning = os.getenv("start_from_beginning").strip().lower(),
+        batch_size = int(os.getenv("batch_size").strip()),
+        max_retries = int(os.getenv("max_retries").strip()),
+        backoff_seconds = float(os.getenv("backoff_seconds").strip()),
+        status_interval_seconds = float(os.getenv("status_interval_seconds").strip()),
+        offsets_path = os.getenv("offsets_path".strip())
     )
     if (app_info.start_from_beginning == "false"):
         app_info.start_from_beginning = False

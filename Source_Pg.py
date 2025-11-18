@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 from typing import AsyncIterator, Dict, Any, Tuple, Optional
 import psycopg
 
@@ -91,11 +92,17 @@ async def Wal2Json_Via_Pg_Recvlogical(dsn_params, slot, publication, start_lsn, 
         args += ["--startpos", start_lsn]
 
     # output is newline-delimited json objects (transaction chunks)
+    # user must have replication privileges, and pg_hba.conf must allow replication connection (not just host connections)
+    # PGPASSWORD is the standard PostgreSQL environment variable for passing passwords to CLI tools
+    # We must copy the existing environment (os.environ.copy()) so Windows can find pg_recvlogical in PATH
+    env = os.environ.copy()
+    env["PGPASSWORD"] = dsn_params["password"]
+    
     proc = await asyncio.create_subprocess_exec(
         *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        env={"PGPASSWORD": dsn_params["password"]}
+        env=env
     )
 
     # make sure proc exists. assert will make the code fail very noticably

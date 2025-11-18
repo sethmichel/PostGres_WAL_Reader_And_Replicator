@@ -27,7 +27,7 @@ def Create_LSN_Offset_Table():
            """
 
 
-def Get_Last_Applied_Lsn():
+def Get_Last_Applied_Lsn_Sql():
     return f"SELECT last_applied_lsn FROM {lsn_offset_table} WHERE slot_name = ?"
 
 

@@ -62,6 +62,8 @@ async def Run_Apply_Loop(source: AsyncIterator[Tuple[str, Dict[str, Any]]], batc
     if buffer:
         await Process_Batch(buffer, apply_batch, persist_lsn, max_retries, backoff_seconds)
         buffer.clear()
+    else:
+        pass
 
 
 ''' handles retries, backoff, and gives the ok to save the lsn (persist_lsn)
