@@ -3,11 +3,11 @@ import os
 import sys
 from pathlib import Path
 from typing import Dict, Any
-from Startup_Config import App_Config, Pg_Conn_Info, Load_Env_Config
-from Offsets import Ensure_Offsets_Store, Get_Last_Applied_Lsn, Set_Last_Applied_Lsn
-from Source_Pg import Ensure_Publication, Ensure_Slot, Wal2Json_Via_Pg_Recvlogical, Get_Current_Lsn
+from Startup_Config import App_Config, Pg_Conn_Info, Load_Docker_Env_Config, Load_App_Env_Config
+from Offsets import Get_Lsn_Table_Conn, Get_Last_Applied_Lsn, Set_Last_Applied_Lsn
+from Source_Pg import Check_Publication, Check_Replication_Slot, Wal2Json_Via_Pg_Recvlogical, Get_Current_Lsn
 from Apply_Manager import Run_Apply_Loop
-from Sink_Postgres import Apply_Postgres
+from Sink_Postgres import Apply_Postgres, Get_Sink_Db_Conn, Create_Cdc_Table
 
 
 # return Dict[str, Any]
@@ -63,17 +63,21 @@ def Check_Docker_Connections():
 async def Main():
     # check folders and load env files. these all close the program if they fail
     Check_Docker_Connections()
-    primary_config = Load_Env_Config('Docker_Connections/primary.env')
-    standy_config = Load_Env_Config('Docker_Connections/standby.env')
-    app_config = Load_Env_Config('app.env')
+    primary_config = Load_Docker_Env_Config('Primary.env')
+    standby_config = Load_Docker_Env_Config('Standby.env')
+    sink_config = Load_Docker_Env_Config('Sink.env')
+    app_config = Load_App_Env_Config('app.env', primary_config)
 
     # make dsn strings
     primary_dsn = Make_Dsn(primary_config)
+    sink_dsn = Make_Dsn(sink_config)
 
     # check stuff exists or create it
-    Ensure_Offsets_Store(app_config.offsets_path)                       # make sqllite lsn table if it doesn't exist
-    Ensure_Publication(primary_dsn, app_config.publication)             # check the publication is still up. if not create one on primary
-    Ensure_Slot(primary_dsn, app_config.slot_name, app_config.plugin)   # cleck for a slot, if not create one
+    Get_Sink_Db_Conn(sink_dsn)                                                   # get connection to the sink postgres db
+    Create_Cdc_Table()                                                           # create sink table if it doesn't already exist
+    Get_Lsn_Table_Conn(app_config.offsets_path)                                  # make sqllite lsn table if it doesn't exist
+    Check_Publication(primary_dsn, app_config.publication)                       # check the publication is still up. if not create one on primary
+    Check_Replication_Slot(primary_dsn, app_config.slot_name, app_config.plugin) # cleck for a slot, if not create one
 
     # get the most recent lsn that we successfully processed
     most_recent_successful_lsn = Get_Last_Applied_Lsn(app_config.offsets_path, app_config.slot_name)
@@ -81,7 +85,8 @@ async def Main():
     if most_recent_successful_lsn == None and not app_config.start_from_beginning:
         most_recent_successful_lsn = Get_Current_Lsn(primary_dsn)
 
-    # 
+    # this variable is now a async generator object
+    # this is called in a loop in apply_manager.py
     source = Wal2Json_Via_Pg_Recvlogical(
         dsn_params=Make_Dsn_Params_Dict(primary_config),
         slot=app_config.slot_name,
@@ -90,15 +95,18 @@ async def Main():
         status_interval_seconds=app_config.status_interval_seconds
     )
 
-    async def Apply_Batch(events):
-        # choose a sink; stdout for dev, postgres or others for prod
-        # await apply_postgres(other_dsn, events)
-        for _ in []:  # placeholder to keep the function async even if stdout
-            pass
+    # send data to the sink
+    # choose a sink; test sink or real sink
+    async def Apply_Batch(data):
+        await Apply_Postgres(sink_dsn, data)
 
+
+    # function to save the lsn to the table
     def Persist_Lsn(lsn: str):
         Set_Last_Applied_Lsn(app_config.offsets_path, app_config.slot_name, lsn)
 
+    # main data loop
+    # generator -> batch results -> process batch -> send to sink -> save lsn -> generator
     await Run_Apply_Loop(
         source=source,
         batch_size=app_config.batch_size,

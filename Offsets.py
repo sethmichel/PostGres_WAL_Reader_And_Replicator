@@ -14,37 +14,48 @@ restart I read that number back
 this file will store and get my last_applied_lsn
 '''
 
+last_lsn_db_conn = None # connection to sqlite where we store the last applied lsn
 
-# make sqllite table if it doesn't exist
-def Ensure_Offsets_Store(passed_path):
-    create_offset_table_sql = Create_LSN_Offset_Table()
+
+# returns connection to the sqlite table holding the lsn values
+# creates the table if it doesn't exist (safe to run at startup)
+def Get_Lsn_Table_Conn(passed_path):
+    global last_lsn_db_conn
 
     Path(passed_path).parent.mkdir(parents=True, exist_ok=True)
-
-    with sqlite3.connect(passed_path) as cx:
-        cx.execute(create_offset_table_sql)
-        cx.commit()
+    
+    try:
+        # this creates the file if it doesn't exist
+        last_lsn_db_conn = sqlite3.connect(passed_path)
+        
+        # Create table if it doesn't exist
+        create_offset_table_sql = Create_LSN_Offset_Table()
+        last_lsn_db_conn.execute(create_offset_table_sql)
+        last_lsn_db_conn.commit()
+                
+    except sqlite3.Error as e:
+        raise Exception(f"Failed to connect to SQLite database at {passed_path}: {e}")
 
 
 # gets most recent lsn for a given replication slot
 # called at startup/restart
-def Get_Last_Applied_Lsn(passed_path, slot_name):
+def Get_Last_Applied_Lsn(slot_name):
+    global last_lsn_db_conn
+    
     get_lsn_sql = Get_Last_Applied_Lsn(slot_name)
+    row = last_lsn_db_conn.execute(get_lsn_sql, (slot_name,)).fetchone()
 
-    with sqlite3.connect(passed_path) as cx:
-        row = cx.execute(get_lsn_sql, (slot_name,)).fetchone()
-
-        if (row):
-            return row[0]
-        else:
-            return None
+    if (row):
+        return row[0]
+    else:
+        return None
 
 
 # save lsn after using it
 # called everyt ime my sink successfully commits a batch
-def Set_Last_Applied_Lsn(passed_path, slot_name, lsn):
+def Set_Last_Applied_Lsn(slot_name, lsn):
+    global last_lsn_db_conn
+    
     set_lsn_sql = Set_Last_Applied_Lsn()
-
-    with sqlite3.connect(passed_path) as cx:
-        cx.execute(set_lsn_sql, (slot_name, lsn))
-        cx.commit()
+    last_lsn_db_conn.execute(set_lsn_sql, (slot_name, lsn))
+    last_lsn_db_conn.commit()

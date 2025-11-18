@@ -51,6 +51,8 @@ async def Run_Apply_Loop(source: AsyncIterator[Tuple[str, Dict[str, Any]]], batc
 
     buffer = [] # List[Tuple[str, Dict[str, Any]]]
 
+    # source is a async generator
+    # "async for" handles "await" internally
     async for lsn, obj in source:
         buffer.append((lsn, obj))
         if len(buffer) >= batch_size:

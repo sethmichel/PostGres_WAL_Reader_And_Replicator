@@ -30,7 +30,7 @@ class App_Config:
 
 
 # load database connection info from the .env files
-def Load_Env_Config(env_file):
+def Load_Docker_Env_Config(env_file):
     # Load the specific .env file
     env_path = Path(__file__).parent / "Docker_Connections" / env_file
     load_dotenv(env_path)
@@ -49,4 +49,34 @@ def Load_Env_Config(env_file):
         sys.exit(1)
     else:
         return conn_info
+
+
+# load app settings .env files
+def Load_App_Env_Config(env_file, primary_config):
+    # Load the specific .env file
+    load_dotenv(env_file)
+
+    app_info = App_Config(
+        primary = primary_config,
+        publication = os.getenv("publication_name"),
+        slot_name = os.getenv("slot_name"),
+        plugin = os.getenv("plugin"),
+        start_from_beginning = os.getenv("start_from_beginning").lower(),
+        batch_size = int(os.getenv("batch_size")),
+        max_retries = int(os.getenv("max_retries")),
+        backoff_seconds = float(os.getenv("backoff_seconds")),
+        status_interval_seconds = float(os.getenv("status_interval_seconds")),
+        offsets_path = os.getenv("offsets_path")
+    )
+    if (app_info.start_from_beginning == "false"):
+        app_info.start_from_beginning = False
+    else:
+        app_info.start_from_beginning = True
+
+    # if any memeber variable is None
+    if any(value is None for value in vars(app_info).values()):
+        print(f"Error: missing environment variables in file: {env_file}")
+        sys.exit(1)
+    else:
+        return app_info
     

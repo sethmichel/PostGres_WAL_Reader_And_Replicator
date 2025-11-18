@@ -19,7 +19,7 @@ Offsets.py (saves LSN to isolated/separate SQLite for crash recovery)
 2) main.py handles the core loop, makes sure various pg and system components are correct or creates them. starts the data pipeline
 
 3) source_pg.py is the bridge between my code and pg, it gets the actual decoded wal data from pg (pg decodes it via wal2json which is the plugin setting I chose).
-   now I have readable wal updates. this is in json or pgoutput messages format
+   now I have readable wal updates. this is in json
 
 4) these wal updates sent to apply_manager.py from main.py
 
@@ -62,7 +62,7 @@ getter/setter for replication offset (last_applied_lsn). it's so the consumer ca
 
 - it's the input for the data pipeline, it transforms the binary wal stream into something usable
 
-- Main.py calls Wal2Json_Via_Pg_Recvlogical() to get an async iterator of WAL events
+- Main.py calls Wal2Json_Via_Pg_Recvlogical() - notice that args is a command line command, so this is basically running a subprocess that does a command line prompt to get WAL results
 
 - data flow of this file
 pg -> WAL -> logical decoding plugin -> pg_recvlogical -> stdout JSON -> Python yields event
@@ -74,7 +74,7 @@ pg -> WAL -> logical decoding plugin -> pg_recvlogical -> stdout JSON -> Python 
 - a "sink" means the destination where python is sending the data. the analogy is data is flowing out of pg and going down the "sink" into the destination.
 - this is the connection to the sink and how to send data to it (inserts/updates...). it ensures safe replays
 
-- apply_manager.py calls sink_postgres.apply_postgres() whenever it has a new batch of events ready
+- 
 
 
 **sink_stdout.py**
@@ -96,6 +96,11 @@ pg -> WAL -> logical decoding plugin -> pg_recvlogical -> stdout JSON -> Python 
 
 - data gets "at-least-once delivery" meaning it's for sure at least sent once to the sink
 
+
+**sqlite**
+- this is basically just a file on disk, so we use the sqlite3 module and create it in the code if it's missing
+
+
 **Main.py**
 - purpose: app start and main data loops/configs
 - does startup stuff like 
@@ -106,6 +111,7 @@ pg -> WAL -> logical decoding plugin -> pg_recvlogical -> stdout JSON -> Python 
     - get the most recent lsn so we can figure out our starting place
     - start the WAL source stream by connecting to the db (start that async iterator)
     - check sink stuff is all correct
+    - create the async generator which is used by apply_manager.py to actually get the wal results in a loop
 
 the key is the run_apply_loop() code. that loop is basically the data pipeline
 

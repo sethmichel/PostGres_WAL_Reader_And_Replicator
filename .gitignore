@@ -1,8 +1,11 @@
 # my stuff to ignore
-Docker_Connections/primary.env
-Docker_Connections/standby.env
+Docker_Connections/Primary.env
+Docker_Connections/Standby.env
+Docker_Connections/Sink.env
 Docker_Connections/docker-compose.yml
 app.env
+Sqlite/Lsn_Offsets.Sqlite
+password_issue.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -39,6 +39,17 @@ def Set_Last_Applied_Lsn():
             """
 
 
+def Create_Cdv_Events_Table():
+    return """
+            CREATE TABLE IF NOT EXISTS cdc_events (
+                table_fqn TEXT NOT NULL,
+                pk TEXT NOT NULL,
+                commit_lsn TEXT NOT NULL,
+                payload JSONB,
+                PRIMARY KEY (table_fqn, pk, commit_lsn));
+           """
+
+
 def Insert_Into_Cdc_Events():
     return """
            INSERT INTO cdc_events(table_fqn, pk, commit_lsn, payload)
