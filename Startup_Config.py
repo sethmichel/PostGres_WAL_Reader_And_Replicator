@@ -8,6 +8,7 @@ import sys
 @dataclass
 class Pg_Conn_Info:
     host: str
+    host_name: str
     port: int
     user: str
     password: str
@@ -18,7 +19,8 @@ class Pg_Conn_Info:
 @dataclass
 class App_Config:
     primary: Pg_Conn_Info
-    publication: str
+    publication_name: str
+    subscription_name: str
     slot_name: str
     plugin: str                  # 'pgoutput' or 'wal2json'
     start_from_beginning: bool   # if no offset yet
@@ -50,6 +52,7 @@ def Load_Docker_Env_Config(env_file):
 
     conn_info = Pg_Conn_Info(
         host="localhost",   # localhost is for when connecting from host machine
+        host_name=os.getenv("HOST_NAME").strip(),
         port=host_port,     # use the HOST port, not the container port
         user=os.getenv("POSTGRES_USER").strip(),
         password=os.getenv("POSTGRES_PASSWORD").strip(),
@@ -57,7 +60,7 @@ def Load_Docker_Env_Config(env_file):
     )
     #print(f"DEBUG: Loaded config from {env_file}: user={conn_info.user}, host_port={conn_info.port}")
 
-    if (conn_info.host == None or conn_info.port == None or conn_info.user == None or
+    if (conn_info.host == None or conn_info.host_name == None or conn_info.port == None or conn_info.user == None or
         conn_info.password == None or conn_info.dbname == None):
         print(f"Error: missing environment variables in file: {env_file}")
         sys.exit(1)
@@ -72,7 +75,8 @@ def Load_App_Env_Config(env_file, primary_config):
 
     app_info = App_Config(
         primary = primary_config,
-        publication = os.getenv("publication_name").strip(),
+        publication_name = os.getenv("publication_name").strip(),
+        subscription_name = os.getenv("subscription_name").strip(),
         slot_name = os.getenv("slot_name").strip(),
         plugin = os.getenv("plugin").strip(),
         start_from_beginning = os.getenv("start_from_beginning").strip().lower(),
@@ -80,7 +84,7 @@ def Load_App_Env_Config(env_file, primary_config):
         max_retries = int(os.getenv("max_retries").strip()),
         backoff_seconds = float(os.getenv("backoff_seconds").strip()),
         status_interval_seconds = float(os.getenv("status_interval_seconds").strip()),
-        offsets_path = os.getenv("offsets_path".strip())
+        offsets_path = os.getenv("offsets_path").strip()
     )
     if (app_info.start_from_beginning == "false"):
         app_info.start_from_beginning = False

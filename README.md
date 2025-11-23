@@ -2,7 +2,7 @@ This is a Change Data Capture (CDC) pipeline that:
 1) Reads PostgreSQL (pg) WAL (Write-Ahead Log) events with logical replication
 2) Transforms them into normalized events that I can manipulate and move around the program
 3) Sends them to a destination (sink) with guaranteed delivery
-4) Tracks progress to survive crashes/restart without data loss, data duplication, and is idempotency (no variety in effects, everything happens the exact same each time)
+4) Tracks progress to survive crashes/restart without data loss, data duplication, and has idempotenic (no variety in effects, everything happens the exact same each time)
 
 
 **Data Flow**
@@ -19,16 +19,16 @@ Offsets.py (saves LSN to isolated/separate SQLite for crash recovery)
 2) main.py handles the core loop, makes sure various pg and system components are correct or creates them. starts the data pipeline
 
 3) source_pg.py is the bridge between my code and pg, it gets the actual decoded wal data from pg (pg decodes it via wal2json which is the plugin setting I chose).
-   now I have readable wal updates. this is in json
+now I have readable wal updates. this is in json
 
 4) these wal updates sent to apply_manager.py from main.py
 
-5) apply_manager.py will normalize the decoded wal data so it's easy to work with, it batches them together. Then sends the batch to my sink in sink_stdout.py which processes it. sink_stdout.py is basically a test file right now so it'll print those WAL changes to the console. if sink_stdout.py does everything successfully, then the main data loop will save the last_applied_lsn to the lsn table. otherwise it will retry processing that batch a few times. we know if it worked out not because it return like normal or raise an error.
+5) apply_manager.py will normalize the decoded wal data so it's easy to work with, it batches them together. Then sends the batch to my sink in sink_stdout.py which processes it.     sink_stdout.py is basically a test file right now so it'll print those WAL changes to the console. if sink_stdout.py does everything successfully, then the main data loop will save the last_applied_lsn to the lsn table. otherwise it will retry processing that batch a few times. we know if it worked out not because it'll return like normal or raise an error (if it raises and error or crashes, I have it setup to where it'll pick back up where it left off).
 
 
 **Key Stability Features**
 At Least Once Delivery - No Data Loss
-- I only save the LSN is a WAL data batch is successfully processed
+- I only save the LSN if a WAL data batch is successfully processed
 - If I crash mid-processing or anywhere, I restart from the last saved LSN and reprocess (most recent lsn is saved in separte sqlite database)
 - Data re-tries processing on failure. it increases wait times between retries.
 
@@ -39,6 +39,15 @@ Idempotency - Consistancey & No Duplicate Data
 
 System Crashes/Restarts/Disconnects
 - Same solutions I've described. I can use the most recent saved LSN to return to the correct position in WAL, and my code will skip duplicates
+
+
+**How To Run**
+- This system is designed to run continuously for hours at a time, not a few times where it processes batches of info
+- If You want to test this:
+    - make your own .env files, docker yml file, sqlite db, and app.env
+    - set up your own docker and postgres servers for the publisher, subscriber, and sink.
+    - make sure wal2json, and replication slots are correct for the containers
+    - to test locally, run main.py, then run Test_Data_Generator.py. The generator will do various commands to the publisher server so that the program and get new data
 
 
 ***Files***
@@ -74,8 +83,6 @@ pg -> WAL -> logical decoding plugin -> pg_recvlogical -> stdout JSON -> Python 
 - a "sink" means the destination where python is sending the data. the analogy is data is flowing out of pg and going down the "sink" into the destination.
 - this is the connection to the sink and how to send data to it (inserts/updates...). it ensures safe replays
 
-- 
-
 
 **sink_stdout.py**
 - purpose: a testing sink. instead of writeing data somewhere, it prints the events to the console
@@ -98,7 +105,7 @@ pg -> WAL -> logical decoding plugin -> pg_recvlogical -> stdout JSON -> Python 
 
 
 **sqlite**
-- this is basically just a file on disk, so we use the sqlite3 module and create it in the code if it's missing
+- this is basically just a file on disk, it's an sqlite database we store the lsn's we've successfully processed to
 
 
 **Main.py**

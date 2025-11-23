@@ -54,6 +54,52 @@ def Check_Replication_Slot(dsn, slot, plugin):
                 cx.commit()
 
 
+# check if subscription exists on standby, if not create one that connects to primary
+def Check_Subscription(standby_dsn, primary_config, app_config):
+    """
+    Create a subscription on the standby server that subscribes to the primary's publication.
+    
+    Args:
+        standby_dsn: Connection string to standby server (from host machine)
+        primary_docker_host: Docker container hostname for primary (e.g., 'pg_primary')
+        primary_user: Primary database user
+        primary_password: Primary database password
+        primary_dbname: Primary database name
+        subscription_name: Name of the subscription to create
+        publication_name: Name of the publication on primary to subscribe to
+    """
+    with psycopg.connect(standby_dsn, autocommit=True) as cx:
+        with cx.cursor() as cur:
+            # Check if subscription already exists
+            cur.execute("""SELECT 1 FROM pg_subscription WHERE subname = %s""", (app_config.subscription_name,))
+            exists = cur.fetchone()
+            
+            if not exists:
+                # Build connection string for primary using Docker network hostname
+                # The subscription runs inside the standby container, so it needs to use
+                # the Docker network hostname not localhost
+                connection_string = (
+                    f"host={primary_config.host_name} " # not localhost
+                    f"port=5432 "      # Use docker container port, not host port
+                    f"user={primary_config.user} "
+                    f"password={primary_config.password} "
+                    f"dbname={primary_config.dbname}"
+                )
+                
+                # Create subscription - must run outside transaction block
+                # Note: We use string formatting here because subscription name and publication name 
+                # cannot be parameterized in CREATE SUBSCRIPTION
+                cur.execute(
+                    f"CREATE SUBSCRIPTION {app_config.subscription_name} "
+                    f"CONNECTION '{connection_string}' "
+                    f"PUBLICATION {app_config.publication_name} "
+                    f"WITH (copy_data = false)"
+                )
+                print(f"Created subscription '{app_config.subscription_name}' on standby server")
+            else:
+                print(f"Subscription '{app_config.subscription_name}' already exists on standby server")
+
+
 ''' 
 - decoder: launch a subprocess using pg_recvlogical to stream transformed WAL output that's readable
 - the messages are produced by wal2json over pg_recvlogical
@@ -75,21 +121,26 @@ async def Wal2Json_Via_Pg_Recvlogical(dsn_params, slot, publication, start_lsn, 
         "-p", str(dsn_params["port"]),
         "-U", dsn_params["user"],
         "-d", dsn_params["dbname"],
-        "-S", slot,
+        #"-S", slot,
         "-o", f"pretty-print=0",       # -o means formatting
-        "-o", f"add-tables=*",         # subset if desired
+        #"-o", f"add-tables=*",        # wal2json fails if we use add-tables=*
         "-o", f"include-xids=1",
         "-o", f"include-timestamp=1",
         "-o", f"include-lsn=1",
         "--slot", slot,                # replication slot name
         "--plugin", "wal2json",
         "--start",
-        "--no-loop",
+        "-f", "-",                     # write to stdout
+        #"--no-loop",
         "--status-interval", str(int(status_interval_seconds)),
     ]
 
     if start_lsn:
         args += ["--startpos", start_lsn]
+    
+    #print(f"DEBUG: Starting pg_recvlogical with command:")
+    #print(f"  {' '.join(args)}")
+    #print(f"  Starting from LSN: {start_lsn if start_lsn else 'beginning'}")
 
     # output is newline-delimited json objects (transaction chunks)
     # user must have replication privileges, and pg_hba.conf must allow replication connection (not just host connections)
@@ -107,6 +158,16 @@ async def Wal2Json_Via_Pg_Recvlogical(dsn_params, slot, publication, start_lsn, 
 
     # make sure proc exists. assert will make the code fail very noticably
     assert proc.stdout is not None
+    assert proc.stderr is not None
+    
+    # Read stderr in a separate task to see errors
+    async def log_stderr():
+        async for line in proc.stderr:
+            error_msg = line.decode("utf-8").strip()
+            if error_msg:
+                print(f"pg_recvlogical STDERR: {error_msg}")
+    
+    stderr_task = asyncio.create_task(log_stderr())
     
     # "async for" does await internally. the slow parts is waiting for the data to arrive from pg from the subprocess
     async for raw in proc.stdout:
@@ -126,6 +187,12 @@ async def Wal2Json_Via_Pg_Recvlogical(dsn_params, slot, publication, start_lsn, 
 
         yield lsn, obj
 
+    # Cancel stderr task and wait for subprocess to finish
     # this'll wait for the subprocess to finish which means 1) when I close the program, 
     # 2) the wal stream ends, 3) it gets an error
+    stderr_task.cancel()
+    try:
+        await stderr_task
+    except asyncio.CancelledError:
+        pass
     await proc.wait() 

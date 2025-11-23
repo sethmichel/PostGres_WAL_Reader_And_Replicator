@@ -25,9 +25,15 @@ return: List[Dict[str, Any]]
 paras: obj: Dict[str, Any] '''
 def Normalize_Wal2Json(obj):
     out = []
-    commit_lsn = obj.get("lsn") or obj.get("commit_lsn")
+    # wal2json usually provides 'nextlsn' which marks the end of the transaction
+    commit_lsn = obj.get("lsn") or obj.get("commit_lsn") or obj.get("nextlsn")
     
-    for ch in obj.get("changes", []):
+    # wal2json v1+ uses 'change' (singular) as the key for the list of changes
+    changes = obj.get("change", [])
+    if not isinstance(changes, list):
+        changes = [changes]
+
+    for ch in changes:
         out.append({
             "commit_lsn": commit_lsn,
             "type": ch.get("kind"),          # insert, update, delete
@@ -63,7 +69,7 @@ async def Run_Apply_Loop(source: AsyncIterator[Tuple[str, Dict[str, Any]]], batc
         await Process_Batch(buffer, apply_batch, persist_lsn, max_retries, backoff_seconds)
         buffer.clear()
     else:
-        pass
+        print("buffer empty, we must've finished reading the wal data")
 
 
 ''' handles retries, backoff, and gives the ok to save the lsn (persist_lsn)

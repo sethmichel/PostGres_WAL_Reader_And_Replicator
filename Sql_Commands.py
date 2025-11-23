@@ -26,7 +26,18 @@ def Create_LSN_Offset_Table():
             )
            """
 
-
+def Create_Test_Data_Table_Sql():
+    return """
+            CREATE TABLE IF NOT EXISTS test_data (
+                id SERIAL PRIMARY KEY,
+                counter INTEGER NOT NULL,
+                message TEXT,
+                value NUMERIC(10,2),
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+            """
+            
 def Get_Last_Applied_Lsn_Sql():
     return f"SELECT last_applied_lsn FROM {lsn_offset_table} WHERE slot_name = ?"
 
