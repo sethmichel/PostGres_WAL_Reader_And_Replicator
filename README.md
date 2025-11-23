@@ -2,16 +2,17 @@ This is a Change Data Capture (CDC) pipeline that:
 1) Reads PostgreSQL (pg) WAL (Write-Ahead Log) events with logical replication
 2) Transforms them into normalized events that I can manipulate and move around the program
 3) Sends them to a destination (sink) with guaranteed delivery
-4) Tracks progress to survive crashes/restart without data loss, data duplication, and has idempotenic (no variety in effects, everything happens the exact same each time)
-
+4) Tracks progress to survive crashes/restart without data loss, data duplication, and has idempotenic (no variety in effects, everything happens the exact same each time)  
+&nbsp;  
 
 **Data Flow**
-PostgreSQL WAL → pg_recvlogical (subprocess) → Source_Pg.py (async iterator)
-    ↓
-Apply_Manager.py (batching + normalization + retry logic)
-    ↓
-Sink (Stdout for testing, Postgres for prod)
-    ↓
+
+PostgreSQL WAL → pg_recvlogical (subprocess) → Source_Pg.py (async iterator)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓  
+Apply_Manager.py (batching + normalization + retry logic)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓  
+Sink (Stdout for testing, Postgres for prod)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↓   
 Offsets.py (saves LSN to isolated/separate SQLite for crash recovery)
 
 1) config.py holds my connections to pg and system configs
@@ -24,9 +25,10 @@ now I have readable wal updates. this is in json
 4) these wal updates sent to apply_manager.py from main.py
 
 5) apply_manager.py will normalize the decoded wal data so it's easy to work with, it batches them together. Then sends the batch to my sink in sink_stdout.py which processes it.     sink_stdout.py is basically a test file right now so it'll print those WAL changes to the console. if sink_stdout.py does everything successfully, then the main data loop will save the last_applied_lsn to the lsn table. otherwise it will retry processing that batch a few times. we know if it worked out not because it'll return like normal or raise an error (if it raises and error or crashes, I have it setup to where it'll pick back up where it left off).
-
-
-**Key Stability Features**
+&nbsp;  
+&nbsp;  
+  
+**Key Stability Features**  
 At Least Once Delivery - No Data Loss
 - I only save the LSN if a WAL data batch is successfully processed
 - If I crash mid-processing or anywhere, I restart from the last saved LSN and reprocess (most recent lsn is saved in separte sqlite database)
@@ -49,24 +51,24 @@ System Crashes/Restarts/Disconnects
     - make sure wal2json, and replication slots are correct for the containers
     - to test locally, run main.py, then run Test_Data_Generator.py. The generator will do various commands to the publisher server so that the program and get new data
 
-
+&nbsp;  
 ***Files***
 
-**config.py**
-what it does: Holds all connection info and settings
+**config.py**  
+What it does: Holds all connection info and settings
 
 classes
     pg_conn_info: holds a pg connection parameters
     app_config: app settings
 
 
-**offests.py**
+**offests.py**  
 what it does: handles the last_applied_lsn. it moves it around and saves/loads it. we'd lose our place on restarts without this
 
 getter/setter for replication offset (last_applied_lsn). it's so the consumer can start from the exact right place after a crash/restart/reconnect. you want to store this in a separate file or db outside the replication system. If I lose this value then I'll lose database data
 
 
-**source_pg.py**
+**source_pg.py**  
 - purpose: This is the bidge between my code and pg. it's the wal reader and it decodes the wal from each logical replication slot into something I can read (so it's the logical replication source). Wal2Json_Via_Pg_Recvlogical() is a async iterator for getting wal updates.
 
 - it's the input for the data pipeline, it transforms the binary wal stream into something usable
@@ -77,14 +79,14 @@ getter/setter for replication offset (last_applied_lsn). it's so the consumer ca
 pg -> WAL -> logical decoding plugin -> pg_recvlogical -> stdout JSON -> Python yields event
 
 
-**sink_postgres.py**
+**sink_postgres.py**  
 - purpose: Send the transformed wal data to a destination and apply those changes
 
 - a "sink" means the destination where python is sending the data. the analogy is data is flowing out of pg and going down the "sink" into the destination.
 - this is the connection to the sink and how to send data to it (inserts/updates...). it ensures safe replays
 
 
-**sink_stdout.py**
+**sink_stdout.py**  
 - purpose: a testing sink. instead of writeing data somewhere, it prints the events to the console
 
 
@@ -124,11 +126,7 @@ the key is the run_apply_loop() code. that loop is basically the data pipeline
 
 
 
-config.py (settings) -> main.py (builds configs, sets up slots, starts loop) -> source_pg.py (streams WAL, gets the new lsn, events)
--> apply_manager.py (organizes/processes decoded wal data) --1--> sink_postgres.py (send data to sink)
-                                                           --2--> sink_stdout.py (our debugging sink)
--> offsets.py (save the new lsn)
-
+config.py (settings) -> main.py (builds configs, sets up slots, starts loop) -> source_pg.py (streams WAL, gets the new lsn, events) -> apply_manager.py (organizes/processes decoded wal data) -> sink_postgres.py (send data to sink) OR sink_stdout.py (our debugging sink) -> offsets.py (save the new lsn)
 
 - Main.py makes an app_config object (which has app settings), which is passed around to files.
 - Main.py loads the last_applied_lsn on startup/restart/reconnect and passes it to teh wal stream reader (source_pg.py)
@@ -139,9 +137,8 @@ config.py (settings) -> main.py (builds configs, sets up slots, starts loop) -> 
 
 
 
-
-
-Notes
+&nbsp;  
+**Notes**
 - user must have replication privileges, and pg_hba.conf (in the publisher container) must allow replication connection (not just host connections)
 
 - source_pg.py should have the path to pg_recvlogical.exe. you should put it in your system path. it's probably at "C:\Program Files\PostgreSQL\<version>\bin"
